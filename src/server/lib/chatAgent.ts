@@ -39,6 +39,57 @@ export function requireOpenRouterCostUsd(providerMetadata: unknown): number {
   return openRouterUsageSchema.parse(providerMetadata).openrouter.usage.cost;
 }
 
+// DeepSeek's API reports tokens, not dollars, so cost is priced here.
+// ponytail: flat deepseek-v4-flash list price (USD per 1M tokens); a
+// DEEPSEEK_MODEL with other pricing is metered wrong until this becomes a table.
+const DEEPSEEK_PRICE_PER_M = { input: 0.14, cachedInput: 0.0028, output: 0.28 };
+
+// The slice of the AI SDK's LanguageModelUsage that pricing reads.
+type TokenUsage = {
+  inputTokens?: number;
+  outputTokens?: number;
+  inputTokenDetails?: { cacheReadTokens?: number };
+};
+
+type StepCostInput = {
+  providerMetadata?: unknown;
+  usage: TokenUsage;
+};
+
+function isDeepSeekStep(providerMetadata: unknown): boolean {
+  return (
+    typeof providerMetadata === "object" &&
+    providerMetadata !== null &&
+    "deepseek" in providerMetadata
+  );
+}
+
+export function deepSeekCostUsd(usage: TokenUsage): number {
+  const input = usage.inputTokens ?? 0;
+  const cached = usage.inputTokenDetails?.cacheReadTokens ?? 0;
+  const output = usage.outputTokens ?? 0;
+  return (
+    ((input - cached) * DEEPSEEK_PRICE_PER_M.input +
+      cached * DEEPSEEK_PRICE_PER_M.cachedInput +
+      output * DEEPSEEK_PRICE_PER_M.output) /
+    1_000_000
+  );
+}
+
+/** Lenient: unknown metadata costs 0 (SAM metering). */
+export function chatStepCostUsd(step: StepCostInput): number {
+  return isDeepSeekStep(step.providerMetadata)
+    ? deepSeekCostUsd(step.usage)
+    : openRouterCostUsd(step.providerMetadata);
+}
+
+/** Strict: throws when an OpenRouter step carries no cost (research billing). */
+export function requireChatStepCostUsd(step: StepCostInput): number {
+  return isDeepSeekStep(step.providerMetadata)
+    ? deepSeekCostUsd(step.usage)
+    : requireOpenRouterCostUsd(step.providerMetadata);
+}
+
 // The provider package re-exports only LanguageModelV3 itself, so the stream
 // shape is derived from the interface.
 type StreamResult = Awaited<ReturnType<LanguageModelV3["doStream"]>>;

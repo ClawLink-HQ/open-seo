@@ -8,13 +8,12 @@ import {
   type BillingCustomerContext,
 } from "@/server/billing/subscription";
 import { billResearchSpend } from "@/server/billing/researchSpend";
-import { requireOpenRouterCostUsd } from "@/server/lib/chatAgent";
-import { buildChatAgentModel } from "@/server/lib/openrouter";
+import { requireChatStepCostUsd } from "@/server/lib/chatAgent";
 import {
-  getOptionalEnvValue,
-  getRequiredEnvValue,
-  isHostedServerAuthMode,
-} from "@/server/lib/runtime-env";
+  buildChatAgentModel,
+  requireChatAgentCredentials,
+} from "@/server/lib/openrouter";
+import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
 import { AppError } from "@/server/lib/errors";
 import { z } from "zod";
 import { normalizeAiSuggestion } from "@/shared/ai-prompt-suggestions";
@@ -73,11 +72,7 @@ export async function generateAiPrompts(
     ? suggestedAiTopicSchema.extend({ name: z.string().trim().min(1).max(120) })
     : suggestedAiTopicSchema;
   const result = await generateText({
-    model: buildChatAgentModel(
-      await getRequiredEnvValue("OPENROUTER_API_KEY"),
-      await getOptionalEnvValue("OPENROUTER_MODEL"),
-      "low",
-    ),
+    model: buildChatAgentModel(await requireChatAgentCredentials(), "low"),
     output: Output.object({ schema: outputSchema }),
     maxOutputTokens: 2000,
     abortSignal: AbortSignal.timeout(60_000),
@@ -101,7 +96,7 @@ export async function generateAiPrompts(
     }),
     // Admitted above, so settle the actual cost even if credits ran out since.
     onStepFinish: async (step) => {
-      const costUsd = requireOpenRouterCostUsd(step.providerMetadata);
+      const costUsd = requireChatStepCostUsd(step);
       await billResearchSpend({ ...customer, projectId: input.projectId }, [
         {
           provider: "openrouter",

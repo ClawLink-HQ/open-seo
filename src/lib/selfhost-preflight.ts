@@ -196,19 +196,21 @@ function checkOptionalFeatures(env: EnvRecord, items: PreflightItem[]): void {
   }
 
   items.push(
-    get(env, "OPENROUTER_API_KEY")
+    get(env, "DEEPSEEK_API_KEY") || get(env, "OPENROUTER_API_KEY")
       ? {
           key: "ai",
           name: "AI features",
           level: "ok",
-          message: "OPENROUTER_API_KEY set",
+          message: get(env, "DEEPSEEK_API_KEY")
+            ? "DEEPSEEK_API_KEY set"
+            : "OPENROUTER_API_KEY set",
         }
       : {
           key: "ai",
           name: "AI features",
           level: "info",
           message:
-            "OPENROUTER_API_KEY not set (optional) — SAM, the in-app SEO agent, is disabled.",
+            "DEEPSEEK_API_KEY / OPENROUTER_API_KEY not set (optional) — SAM, the in-app SEO agent, is disabled.",
         },
   );
 

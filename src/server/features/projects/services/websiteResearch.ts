@@ -5,16 +5,15 @@ import {
   billResearchSpend,
   type ResearchSpend,
 } from "@/server/billing/researchSpend";
-import { requireOpenRouterCostUsd } from "@/server/lib/chatAgent";
+import { requireChatStepCostUsd } from "@/server/lib/chatAgent";
 import { fetchLiveSerp } from "@/server/lib/dataforseo/serp";
 import { DataforseoChargedTaskError } from "@/server/lib/dataforseo/envelope";
 import { normalizeBacklinksTarget } from "@/server/lib/dataforseoBacklinksTarget";
 import { AppError } from "@/server/lib/errors";
-import { buildChatAgentModel } from "@/server/lib/openrouter";
 import {
-  getOptionalEnvValue,
-  getRequiredEnvValue,
-} from "@/server/lib/runtime-env";
+  buildChatAgentModel,
+  requireChatAgentCredentials,
+} from "@/server/lib/openrouter";
 import { readSite } from "@/server/lib/scrape";
 import {
   MAX_SUGGESTED_KEYWORDS,
@@ -119,11 +118,7 @@ export async function researchWebsite(
   });
   try {
     const result = await generateText({
-      model: buildChatAgentModel(
-        await getRequiredEnvValue("OPENROUTER_API_KEY"),
-        await getOptionalEnvValue("OPENROUTER_MODEL"),
-        "low",
-      ),
+      model: buildChatAgentModel(await requireChatAgentCredentials(), "low"),
       output: Output.object({
         schema: outputSchema,
       }),
@@ -282,7 +277,7 @@ export async function researchWebsite(
         spend.push({
           provider: "openrouter",
           creditFeature: "agent",
-          costUsd: requireOpenRouterCostUsd(step.providerMetadata),
+          costUsd: requireChatStepCostUsd(step),
           operation: "project_website_research",
         });
       },

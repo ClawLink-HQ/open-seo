@@ -19,10 +19,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, withPgClient } from "@/db";
 import { user } from "@/db/schema";
-import {
-  openRouterCostUsd,
-  staticAssistantModel,
-} from "@/server/lib/chatAgent";
+import { chatStepCostUsd, staticAssistantModel } from "@/server/lib/chatAgent";
 import { SamSessionRepository } from "@/server/features/sam/SamSessionRepository";
 import { ProjectContextService } from "@/server/features/project-context/services/ProjectContextService";
 import { ProjectRepository } from "@/server/features/projects/repositories/ProjectRepository";
@@ -33,7 +30,10 @@ import {
   SamTelemetry,
   type SamTurnStats,
 } from "@/server/features/sam/samTurnTelemetry";
-import { buildChatAgentModel } from "@/server/lib/openrouter";
+import {
+  buildChatAgentModel,
+  requireCredentials,
+} from "@/server/lib/openrouter";
 import {
   getEnvValueSync,
   isHostedServerAuthMode,
@@ -195,15 +195,8 @@ export class SamChatAgent extends Think {
   }
 
   private buildModel(reasoningEffort: "max" | "low") {
-    const apiKey = getEnvValueSync(this.env, "OPENROUTER_API_KEY");
-    if (!apiKey) {
-      throw new Error("OPENROUTER_API_KEY is required for the SAM agent");
-    }
-    return buildChatAgentModel(
-      apiKey,
-      getEnvValueSync(this.env, "OPENROUTER_MODEL"),
-      reasoningEffort,
-    );
+    const env = (name: string) => getEnvValueSync(this.env, name);
+    return buildChatAgentModel(requireCredentials(env), reasoningEffort);
   }
 
   override getSkills() {
@@ -239,7 +232,7 @@ export class SamChatAgent extends Think {
       model: this.buildModel("low"),
       prompt,
     });
-    this.recordSpend(openRouterCostUsd(result.providerMetadata));
+    this.recordSpend(chatStepCostUsd(result));
     this.telemetry.compaction();
     return result.text;
   }
@@ -396,7 +389,7 @@ export class SamChatAgent extends Think {
   }
 
   onStepFinish(ctx: StepContext): void {
-    const costUsd = openRouterCostUsd(ctx.providerMetadata);
+    const costUsd = chatStepCostUsd(ctx);
     this.recordSpend(costUsd);
     this.telemetry.step(ctx, costUsd);
   }
